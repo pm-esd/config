@@ -3,8 +3,8 @@ package hcl
 import (
 	"errors"
 
-	"github.com/abulo/go-esd/config"
 	"github.com/hashicorp/hcl"
+	"github.com/pm-esd/config"
 )
 
 // Decoder hcl内容解码器

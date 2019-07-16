@@ -50,8 +50,8 @@ arr1:
 package main
 
 import (
-    "go-esd/config"
-    "go-esd/config/yaml"
+    "pm-esd/config"
+    "pm-esd/config/yaml"
 )
 
 // go run ./examples/yaml.go

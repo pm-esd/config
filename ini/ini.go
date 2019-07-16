@@ -1,8 +1,8 @@
 package ini
 
 import (
-	"github.com/abulo/go-esd/config"
-	"github.com/abulo/go-esd/config/ini/parser"
+	"github.com/pm-esd/config"
+	"github.com/pm-esd/config/ini/parser"
 )
 
 // Decoder ini内容解码器

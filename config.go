@@ -10,9 +10,6 @@ import (
 	"sync"
 )
 
-// 版本号
-const Version = "2.0.1"
-
 // 支持的文件
 const (
 	Ini  = "ini"

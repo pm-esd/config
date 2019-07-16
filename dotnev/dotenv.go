@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/abulo/go-esd/config/ini/parser"
+	"github.com/pm-esd/config/ini/parser"
 )
 
 // DefaultName 默认文件名

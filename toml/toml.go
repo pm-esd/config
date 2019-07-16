@@ -11,7 +11,7 @@ import (
 	"bytes"
 
 	"github.com/BurntSushi/toml"
-	"github.com/abulo/go-esd/config"
+	"github.com/pm-esd/config"
 )
 
 // Decoder the toml content decoder

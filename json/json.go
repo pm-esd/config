@@ -2,7 +2,7 @@
 package json
 
 import (
-	"github.com/abulo/go-esd/config"
+	"github.com/pm-esd/config"
 
 	jsoniter "github.com/json-iterator/go"
 )
