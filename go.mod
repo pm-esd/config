@@ -7,5 +7,7 @@ require (
 	github.com/hashicorp/hcl v1.0.0
 	github.com/imdario/mergo v0.3.7
 	github.com/json-iterator/go v1.1.7
+	github.com/mitchellh/mapstructure v1.1.2
+	golang.org/x/sys v0.0.0-20190910064555-bbd175535a8b
 	gopkg.in/yaml.v2 v2.2.2
 )

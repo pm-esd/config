@@ -5,18 +5,52 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/pm-esd/config/ini/parser"
 )
 
-// DefaultName 默认文件名
-var DefaultName = ".env"
+var (
+	// UpperEnvKey change key to upper on set ENV
+	UpperEnvKey = true
 
-// OnlyLoadExists 加载文件存在
-var OnlyLoadExists bool
+	// DefaultName default file name
+	DefaultName = ".env"
 
-// Load 将解析.env文件数据加载到系统 ENV,使用:dotenv.Load("./", ".env")
+	// OnlyLoadExists load on file exists
+	OnlyLoadExists bool
+
+	// save original Env data
+	// originalEnv []string
+
+	// cache all loaded ENV data
+	loadedData = map[string]string{}
+)
+
+// LoadedData get all loaded data by dontenv
+func LoadedData() map[string]string {
+	return loadedData
+}
+
+// ClearLoaded clear the previously set ENV value
+func ClearLoaded() {
+	for key := range loadedData {
+		_ = os.Unsetenv(key)
+	}
+
+	// reset
+	loadedData = map[string]string{}
+}
+
+// DontUpperEnvKey dont change key to upper on set ENV
+func DontUpperEnvKey() {
+	UpperEnvKey = false
+}
+
+// Load parse .env file data to os ENV.
+// Usage:
+// 	dotenv.Load("./", ".env")
 func Load(dir string, filenames ...string) (err error) {
 	if len(filenames) == 0 {
 		filenames = []string{DefaultName}
@@ -31,36 +65,84 @@ func Load(dir string, filenames ...string) (err error) {
 	return
 }
 
-// LoadExists 加载存在的文件
+// LoadExists only load on file exists
 func LoadExists(dir string, filenames ...string) error {
-	OnlyLoadExists = true
+	oldVal := OnlyLoadExists
 
-	return Load(dir, filenames...)
+	OnlyLoadExists = true
+	err := Load(dir, filenames...)
+	OnlyLoadExists = oldVal
+
+	return err
 }
 
-// LoadFromMap 从给定的字符串映射加载数据
+// LoadFromMap load data from given string map
 func LoadFromMap(kv map[string]string) (err error) {
 	for key, val := range kv {
-		key = strings.ToUpper(key)
+		if UpperEnvKey {
+			key = strings.ToUpper(key)
+		}
+
 		err = os.Setenv(key, val)
 		if err != nil {
 			break
 		}
+
+		// cache it
+		loadedData[key] = val
 	}
 	return
 }
 
-// loadFile 加载并解析 .env 到系统变量中
+// Get get os ENV value by name
+//
+// NOTICE: if is windows OS, os.Getenv() Key is not case sensitive
+func Get(name string, defVal ...string) (val string) {
+	if val = loadedData[name]; val != "" {
+		return
+	}
+
+	if val = os.Getenv(name); val != "" {
+		return
+	}
+
+	if len(defVal) > 0 {
+		val = defVal[0]
+	}
+	return
+}
+
+// Int get a int value by key
+func Int(name string, defVal ...int) (val int) {
+	if str := os.Getenv(name); str != "" {
+		val, err := strconv.ParseInt(str, 10, 0)
+		if err == nil {
+			return int(val)
+		}
+	}
+
+	if len(defVal) > 0 {
+		val = defVal[0]
+	}
+	return
+}
+
+// load and parse .env file data to os ENV
 func loadFile(file string) (err error) {
+	// open file
 	fd, err := os.Open(file)
 	if err != nil {
+		// skip not exist file
 		if os.IsNotExist(err) && OnlyLoadExists {
 			return nil
 		}
 		return err
 	}
+
+	//noinspection GoUnhandledErrorResult
 	defer fd.Close()
 
+	// parse file content
 	s := bufio.NewScanner(fd)
 	p := parser.NewSimpled(parser.NoDefSection)
 
@@ -68,6 +150,7 @@ func loadFile(file string) (err error) {
 		return
 	}
 
+	// set data to os ENV
 	if mp, ok := p.SimpleData()[p.DefSection]; ok {
 		err = LoadFromMap(mp)
 	}

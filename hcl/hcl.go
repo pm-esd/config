@@ -6,20 +6,19 @@ import (
 	"github.com/hashicorp/hcl"
 	"github.com/pm-esd/config"
 )
-
-// Decoder hcl内容解码器
+// Decoder the hcl content decoder
 var Decoder config.Decoder = hcl.Unmarshal
 
-// Encoder hcl内容编码器
+// Encoder the hcl content encoder
 var Encoder config.Encoder = func(ptr interface{}) (out []byte, err error) {
 	err = errors.New("HCL: is not support encode data to HCL")
 	return
 }
 
-// Driver hcl的实例
+// Driver instance for hcl
 var Driver = &hclDriver{config.Hcl}
 
-// hclDriver 格式内容
+// hclDriver for hcl format content
 type hclDriver struct {
 	name string
 }
@@ -29,12 +28,12 @@ func (d *hclDriver) Name() string {
 	return d.name
 }
 
-// GetDecoder 解码
+// GetDecoder for hcl
 func (d *hclDriver) GetDecoder() config.Decoder {
 	return Decoder
 }
 
-// GetEncoder 编码
+// GetEncoder for hcl
 func (d *hclDriver) GetEncoder() config.Encoder {
 	return Encoder
 }

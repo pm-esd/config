@@ -3,15 +3,15 @@ package config
 import (
 	"errors"
 	"fmt"
-	"os"
-	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/pm-esd/config/util/envutil"
 )
 
 var (
 	errInvalidKey = errors.New("invalid config key string")
-	// errNotFound   = errors.New("this key does not exist in the configuration data")
+	errNotFound   = errors.New("this key does not exist in the config")
 )
 
 // Exists key exists check
@@ -19,7 +19,8 @@ func Exists(key string, findByPath ...bool) bool { return dc.Exists(key, findByP
 
 // Exists key exists check
 func (c *Config) Exists(key string, findByPath ...bool) (ok bool) {
-	if key = formatKey(key); key == "" {
+	sep := c.opts.Delimiter
+	if key = formatKey(key, string(sep)); key == "" {
 		return
 	}
 
@@ -33,11 +34,11 @@ func (c *Config) Exists(key string, findByPath ...bool) (ok bool) {
 	}
 
 	// has sub key? eg. "lang.dir"
-	if !strings.Contains(key, ".") {
+	if strings.IndexByte(key, sep) == -1 {
 		return
 	}
 
-	keys := strings.Split(key, ".")
+	keys := strings.Split(key, string(sep))
 	topK := keys[0]
 
 	// find top item data based on top key
@@ -91,6 +92,14 @@ func (c *Config) Exists(key string, findByPath ...bool) (ok bool) {
  * read config data
  *************************************************************/
 
+// Data return all config data
+func Data() map[string]interface{} { return dc.Data() }
+
+// Data get all config data
+func (c *Config) Data() map[string]interface{} {
+	return c.data
+}
+
 // Get config value by key string, support get sub-value by key path(eg. 'map.key'),
 // ok is true, find value from config
 // ok is false, not found or error
@@ -109,8 +118,8 @@ func GetValue(key string, findByPath ...bool) (interface{}, bool) {
 
 // GetValue get value by given key string.
 func (c *Config) GetValue(key string, findByPath ...bool) (value interface{}, ok bool) {
-	key = formatKey(key)
-	if key == "" {
+	sep := c.opts.Delimiter
+	if key = formatKey(key, string(sep)); key == "" {
 		c.addError(errInvalidKey)
 		return
 	}
@@ -133,12 +142,12 @@ func (c *Config) GetValue(key string, findByPath ...bool) (value interface{}, ok
 	}
 
 	// has sub key? eg. "lang.dir"
-	if !strings.Contains(key, ".") {
+	if strings.IndexByte(key, sep) == -1 {
 		// c.addError(errNotFound)
 		return
 	}
 
-	keys := strings.Split(key, ".")
+	keys := strings.Split(key, string(sep))
 	topK := keys[0]
 
 	// find top item data based on top key
@@ -248,9 +257,8 @@ func (c *Config) getString(key string) (value string, ok bool) {
 		value = fmt.Sprintf("%v", val)
 	case string:
 		value = fmt.Sprintf("%v", val)
-
 		if c.opts.ParseEnv {
-			value = c.parseEnvValue(value)
+			value = envutil.ParseEnvValue(value)
 		}
 	default:
 		value = fmt.Sprintf("%v", val)
@@ -524,7 +532,7 @@ func (c *Config) StringMap(key string) (mp map[string]string) {
 		for k, v := range typeData {
 			mp[k] = fmt.Sprintf("%v", v)
 		}
-	case map[interface{}]interface{}: // if decode from yaml
+	case map[interface{}]interface{}: // decode from yaml
 		mp = make(map[string]string)
 		for k, v := range typeData {
 			sk := fmt.Sprintf("%v", k)
@@ -543,84 +551,4 @@ func (c *Config) StringMap(key string) (mp map[string]string) {
 		c.sMapCache[key] = mp
 	}
 	return
-}
-
-// MapStruct alias method of the 'Structure'
-func MapStruct(key string, v interface{}) error { return dc.Structure(key, v) }
-
-// MapStruct alias method of the 'Structure'
-func (c *Config) MapStruct(key string, v interface{}) (err error) {
-	return c.Structure(key, v)
-}
-
-// Structure get config data and map to a structure.
-// usage:
-// 	dbInfo := Db{}
-// 	config.Structure("db", &dbInfo)
-func (c *Config) Structure(key string, v interface{}) (err error) {
-	var ok bool
-	var data interface{}
-
-	// map all data
-	if key == "" {
-		ok = true
-		data = c.data
-	} else {
-		data, ok = c.GetValue(key)
-	}
-
-	if ok {
-		blob, err := JSONEncoder(data)
-		if err != nil {
-			return err
-		}
-
-		err = JSONDecoder(blob, v)
-	}
-	return
-}
-
-// parse env value, eg: "${SHELL}" ${NotExist|defValue}
-var envRegex = regexp.MustCompile(`\${([\w-| ]+)}`)
-
-// parse Env Value
-func (c *Config) parseEnvValue(val string) string {
-	if strings.Index(val, "${") == -1 {
-		return val
-	}
-
-	// nodes like: ${VAR} -> [${VAR}]
-	// val = "${GOPATH}/${APP_ENV | prod}/dir" -> [${GOPATH} ${APP_ENV | prod}]
-	vars := envRegex.FindAllString(val, -1)
-	if len(vars) == 0 {
-		return val
-	}
-
-	var oldNew []string
-	var name, def string
-	for _, fVar := range vars {
-		ss := strings.SplitN(fVar[2:len(fVar)-1], "|", 2)
-
-		// has default ${NotExist|defValue}
-		if len(ss) == 2 {
-			name, def = strings.TrimSpace(ss[0]), strings.TrimSpace(ss[1])
-		} else {
-			def = fVar
-			name = ss[0]
-		}
-
-		envVal := os.Getenv(name)
-		if envVal == "" {
-			envVal = def
-		}
-
-		oldNew = append(oldNew, fVar, envVal)
-	}
-
-	return strings.NewReplacer(oldNew...).Replace(val)
-}
-
-// format key
-func formatKey(key string) string {
-	return strings.Trim(strings.TrimSpace(key), ".")
 }

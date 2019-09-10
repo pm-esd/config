@@ -9,6 +9,11 @@ import (
 	"github.com/imdario/mergo"
 )
 
+var (
+	readonlyErr   = errors.New("the config instance in 'readonly' mode")
+	keyIsEmptyErr = errors.New("the config key is cannot be empty")
+)
+
 // Set val by key
 func Set(key string, val interface{}, setByPath ...bool) error {
 	return dc.Set(key, val, setByPath...)
@@ -18,22 +23,20 @@ func Set(key string, val interface{}, setByPath ...bool) error {
 func (c *Config) Set(key string, val interface{}, setByPath ...bool) (err error) {
 	// if is readonly
 	if c.opts.Readonly {
-		err = errors.New("the config instance in 'readonly' mode")
-		return
+		return readonlyErr
 	}
 
 	// open lock
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	key = formatKey(key)
-	if key == "" {
-		err = errors.New("the config key is cannot be empty")
-		return
+	sep := c.opts.Delimiter
+	if key = formatKey(key, string(sep)); key == "" {
+		return keyIsEmptyErr
 	}
 
 	// is top key
-	if !strings.Contains(key, ".") {
+	if strings.IndexByte(key, sep) == -1 {
 		c.data[key] = val
 		return
 	}
@@ -44,7 +47,7 @@ func (c *Config) Set(key string, val interface{}, setByPath ...bool) (err error)
 		return
 	}
 
-	keys := strings.Split(key, ".")
+	keys := strings.Split(key, string(sep))
 	topK := keys[0]
 	paths := keys[1:]
 
@@ -133,7 +136,7 @@ func buildValueByPath(paths []string, val interface{}) (newItem map[string]inter
 func sliceReverse(ss []string) {
 	ln := len(ss)
 
-	for i := 0; i < int(ln/2); i++ {
+	for i := 0; i < ln/2; i++ {
 		li := ln - i - 1
 		// fmt.Println(i, "<=>", li)
 		ss[i], ss[li] = ss[li], ss[i]

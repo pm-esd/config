@@ -1,16 +1,13 @@
 package config
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"sync"
 )
 
-// 支持的文件
+// There are supported config format
 const (
 	Ini  = "ini"
 	Hcl  = "hcl"
@@ -18,31 +15,36 @@ const (
 	JSON = "json"
 	Yaml = "yaml"
 	Toml = "toml"
+
+	// default delimiter
+	defaultDelimiter byte = '.'
 )
 
-// 内部变量
+// internal vars
 type intArr []int
 type strArr []string
 type intMap map[string]int
 type strMap map[string]string
 
-// 返回一个新的实列
+// type fmtName string
+
+// This is a default config manager instance
 var dc = New("default")
 
-// 驱动接口
+// Driver interface
 type Driver interface {
 	Name() string
 	GetDecoder() Decoder
 	GetEncoder() Encoder
 }
 
-// Decoder yml,json,toml
+// Decoder for decode yml,json,toml format content
 type Decoder func(blob []byte, v interface{}) (err error)
 
-// Encoder for decode yml,json,toml
+// Encoder for decode yml,json,toml format content
 type Encoder func(v interface{}) (out []byte, err error)
 
-// config 选项
+// Options config options
 type Options struct {
 	// parse env value. like: "${EnvName}" "${EnvName|default}"
 	ParseEnv bool
@@ -50,27 +52,35 @@ type Options struct {
 	Readonly bool
 	// enable config data cache
 	EnableCache bool
+	// parse key, allow find value by key path. eg: 'key.sub' will find `map[key]sub`
+	ParseKey bool
+	// the delimiter char for split key path, if `FindByPath=true`. default is '.'
+	Delimiter byte
 	// default write format
 	DumpFormat string
 	// default input format
 	ReadFormat string
 }
 
-// Config 结构定义
+// Config structure definition
 type Config struct {
 	err error
 	// config instance name
 	name string
 	lock sync.RWMutex
 
-	// config 选项
+	// config options
 	opts *Options
 	// all config data
 	data map[string]interface{}
 
 	// loaded config files records
-	loadedFiles []string
+	loadedFiles  []string
+	loadedDriver []string
 
+	// decoders["toml"] = func(blob []byte, v interface{}) (err error){}
+	// decoders["yaml"] = func(blob []byte, v interface{}) (err error){}
+	// drivers map[string]Driver TODO Deprecated decoder and encoder, use driver instead
 	decoders map[string]Decoder
 	encoders map[string]Encoder
 
@@ -84,14 +94,12 @@ type Config struct {
 	sMapCache map[string]strMap
 }
 
-// 新实例
+// New config instance
 func New(name string) *Config {
 	return &Config{
 		name: name,
+		opts: newDefaultOption(),
 		data: make(map[string]interface{}),
-
-		// init options
-		opts: &Options{DumpFormat: JSON, ReadFormat: JSON},
 
 		// default add JSON driver
 		encoders: map[string]Encoder{JSON: JSONEncoder},
@@ -103,10 +111,8 @@ func New(name string) *Config {
 func NewEmpty(name string) *Config {
 	return &Config{
 		name: name,
+		opts: newDefaultOption(),
 		data: make(map[string]interface{}),
-
-		// empty options
-		opts: &Options{},
 
 		// don't add any drivers
 		encoders: map[string]Encoder{},
@@ -126,6 +132,16 @@ func Default() *Config {
 	return dc
 }
 
+func newDefaultOption() *Options {
+	return &Options{
+		ParseKey:  true,
+		Delimiter: defaultDelimiter,
+
+		DumpFormat: JSON,
+		ReadFormat: JSON,
+	}
+}
+
 /*************************************************************
  * config setting
  *************************************************************/
@@ -138,6 +154,13 @@ func ParseEnv(opts *Options) {
 // Readonly set readonly
 func Readonly(opts *Options) {
 	opts.Readonly = true
+}
+
+// Delimiter set delimiter char
+func Delimiter(sep byte) func(*Options) {
+	return func(opts *Options) {
+		opts.Delimiter = sep
+	}
 }
 
 // EnableCache set readonly
@@ -262,14 +285,6 @@ func (c *Config) Name() string {
 	return c.name
 }
 
-// Data return all config data
-func Data() map[string]interface{} { return dc.Data() }
-
-// Data get all config data
-func (c *Config) Data() map[string]interface{} {
-	return c.data
-}
-
 // Error get last error
 func (c *Config) Error() error {
 	return c.err
@@ -278,60 +293,6 @@ func (c *Config) Error() error {
 // IsEmpty of the config
 func (c *Config) IsEmpty() bool {
 	return len(c.data) == 0
-}
-
-// ToJSON string
-func (c *Config) ToJSON() string {
-	buf := &bytes.Buffer{}
-
-	_, err := c.DumpTo(buf, JSON)
-	if err != nil {
-		return ""
-	}
-
-	return buf.String()
-}
-
-// WriteTo a writer
-func WriteTo(out io.Writer) (int64, error) { return dc.WriteTo(out) }
-
-// WriteTo Write out config data representing the current state to a writer.
-func (c *Config) WriteTo(out io.Writer) (n int64, err error) {
-	return c.DumpTo(out, c.opts.DumpFormat)
-}
-
-// DumpTo a writer and use format
-func DumpTo(out io.Writer, format string) (int64, error) { return dc.DumpTo(out, format) }
-
-// DumpTo use the format(json,yaml,toml) dump config data to a writer
-func (c *Config) DumpTo(out io.Writer, format string) (n int64, err error) {
-	var ok bool
-	var encoder Encoder
-
-	format = fixFormat(format)
-	if encoder, ok = c.encoders[format]; !ok {
-		err = errors.New("no exists or no register encoder for the format: " + format)
-		return
-	}
-
-	// is empty
-	if len(c.data) == 0 {
-		return
-	}
-
-	// encode data to string
-	encoded, err := encoder(&c.data)
-	if err != nil {
-		return
-	}
-
-	// write content to out
-	num, err := fmt.Fprintln(out, string(encoded))
-	if err != nil {
-		return
-	}
-
-	return int64(num), nil
 }
 
 // LoadedFiles get loaded files name
@@ -382,8 +343,16 @@ func (c *Config) addErrorf(format string, a ...interface{}) {
 }
 
 // GetEnv get os ENV value by name
+// Deprecated
+//	please use Getenv() instead
 func GetEnv(name string, defVal ...string) (val string) {
-	name = strings.ToUpper(name)
+	return Getenv(name, defVal...)
+}
+
+// Getenv get os ENV value by name. like os.Getenv, but support default value
+// Notice:
+// - Key is not case sensitive when getting
+func Getenv(name string, defVal ...string) (val string) {
 	if val = os.Getenv(name); val != "" {
 		return
 	}
@@ -392,6 +361,11 @@ func GetEnv(name string, defVal ...string) (val string) {
 		val = defVal[0]
 	}
 	return
+}
+
+// format key
+func formatKey(key, sep string) string {
+	return strings.Trim(strings.TrimSpace(key), sep)
 }
 
 // fix yaml format

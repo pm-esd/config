@@ -53,6 +53,8 @@ func (c *Config) LoadRemote(format, url string) (err error) {
 	if err != nil {
 		return err
 	}
+
+	//noinspection GoUnhandledErrorResult
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -72,12 +74,19 @@ func (c *Config) LoadRemote(format, url string) (err error) {
 }
 
 // LoadOSEnv load data from OS ENV
-func LoadOSEnv(keys []string) { dc.LoadOSEnv(keys) }
+func LoadOSEnv(keys []string, keyToLower bool) { dc.LoadOSEnv(keys, keyToLower) }
 
 // LoadOSEnv load data from os ENV
-func (c *Config) LoadOSEnv(keys []string) {
+func (c *Config) LoadOSEnv(keys []string, keyToLower bool) {
 	for _, key := range keys {
-		val := os.Getenv(strings.ToUpper(key))
+		// NOTICE:
+		// if is windows os, os.Getenv() Key is not case sensitive
+		val := os.Getenv(key)
+
+		if keyToLower {
+			key = strings.ToLower(key)
+		}
+
 		_ = c.Set(key, val)
 	}
 }
@@ -161,7 +170,13 @@ func parseVarNameAndType(key string) (string, string) {
 func LoadData(dataSource ...interface{}) error { return dc.LoadData(dataSource...) }
 
 // LoadData load data from map OR struct
+// The dataSources can be:
+//  - map[string]interface{}
 func (c *Config) LoadData(dataSources ...interface{}) (err error) {
+	if c.opts.Delimiter == 0 {
+		c.opts.Delimiter = defaultDelimiter
+	}
+
 	for _, ds := range dataSources {
 		err = mergo.Merge(&c.data, ds, mergo.WithOverride)
 		if err != nil {
@@ -230,6 +245,7 @@ func (c *Config) loadFile(file string, loadExist bool) (err error) {
 		}
 		return err
 	}
+	//noinspection GoUnhandledErrorResult
 	defer fd.Close()
 
 	// read file content
@@ -250,24 +266,13 @@ func (c *Config) loadFile(file string, loadExist bool) (err error) {
 
 // parse config source code to Config.
 func (c *Config) parseSourceCode(format string, blob []byte) (err error) {
-	var ok bool
-	var decoder Decoder
-
-	switch format {
-	case Hcl:
-		decoder, ok = c.decoders[Hcl]
-	case Ini:
-		decoder, ok = c.decoders[Ini]
-	case JSON:
-		decoder, ok = c.decoders[JSON]
-	case Yaml, Yml:
-		decoder, ok = c.decoders[Yaml]
-	case Toml:
-		decoder, ok = c.decoders[Toml]
+	decoder := c.getDecoderByFormat(format)
+	if decoder == nil {
+		return errors.New("not exists or not register decoder for the format: " + format)
 	}
 
-	if !ok {
-		return errors.New("no exists or no register decoder for the format: " + format)
+	if c.opts.Delimiter == 0 {
+		c.opts.Delimiter = defaultDelimiter
 	}
 
 	data := make(map[string]interface{})
@@ -287,5 +292,21 @@ func (c *Config) parseSourceCode(format string, blob []byte) (err error) {
 	}
 
 	data = nil
+	return
+}
+
+func (c *Config) getDecoderByFormat(format string) (decoder Decoder) {
+	switch format {
+	case Hcl:
+		decoder = c.decoders[Hcl]
+	case Ini:
+		decoder = c.decoders[Ini]
+	case JSON:
+		decoder = c.decoders[JSON]
+	case Yaml, Yml:
+		decoder = c.decoders[Yaml]
+	case Toml:
+		decoder = c.decoders[Toml]
+	}
 	return
 }
