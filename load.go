@@ -27,6 +27,28 @@ func (c *Config) LoadFiles(sourceFiles ...string) (err error) {
 	return
 }
 
+// loadDir
+func (c *Config) LoadDir(dir, suffix string) (err error) {
+	fileList := []string{}
+	err = filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
+		ok := strings.HasSuffix(f.Name(), suffix)
+		if ok {
+			fileList = append(fileList, filepath.FromSlash(path))
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, file := range fileList {
+		if err = c.loadFile(file, false); err != nil {
+			return
+		}
+	}
+	return
+}
+
 // LoadExists load one or multi files, will ignore not exist
 func LoadExists(sourceFiles ...string) error { return dc.LoadExists(sourceFiles...) }
 
