@@ -38,7 +38,7 @@ func (c *Config) LoadDir(dir, suffix string) (err error) {
 		return nil
 	})
 	if err != nil {
-		return err
+		return
 	}
 
 	for _, file := range fileList {
