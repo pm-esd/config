@@ -27,6 +27,8 @@ func (c *Config) LoadFiles(sourceFiles ...string) (err error) {
 	return
 }
 
+func LoadDir(dir, suffix string) error { return dc.LoadDir(dir, suffix) }
+
 // loadDir
 func (c *Config) LoadDir(dir, suffix string) (err error) {
 	fileList := []string{}
